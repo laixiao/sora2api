@@ -216,8 +216,41 @@ class TokenManager:
                         raise Exception(f"Sora在您的国家/地区不可用 ({country}): {error_info.get('message', '')}")
 
                     # Check if it's 401 unauthorized (token doesn't support Sora2)
-                    if error_info.get("message", "").startswith("401"):
-                        print(f"⚠️  Token不支持Sora2")
+                    if response.status_code == 401 and "Unauthorized" in error_info.get("message", ""):
+                        print(f"⚠️  Token不支持Sora2，尝试激活...")
+
+                        # Try to activate Sora2
+                        try:
+                            activate_response = await session.get(
+                                "https://sora.chatgpt.com/backend/m/bootstrap",
+                                **kwargs
+                            )
+
+                            if activate_response.status_code == 200:
+                                print(f"✅ Sora2激活请求成功，重新获取邀请码...")
+
+                                # Retry getting invite code
+                                retry_response = await session.get(
+                                    "https://sora.chatgpt.com/backend/project_y/invite/mine",
+                                    **kwargs
+                                )
+
+                                if retry_response.status_code == 200:
+                                    retry_data = retry_response.json()
+                                    print(f"✅ Sora2激活成功！邀请码: {retry_data}")
+                                    return {
+                                        "supported": True,
+                                        "invite_code": retry_data.get("invite_code"),
+                                        "redeemed_count": retry_data.get("redeemed_count", 0),
+                                        "total_count": retry_data.get("total_count", 0)
+                                    }
+                                else:
+                                    print(f"⚠️  激活后仍无法获取邀请码: {retry_response.status_code}")
+                            else:
+                                print(f"⚠️  Sora2激活失败: {activate_response.status_code}")
+                        except Exception as activate_e:
+                            print(f"⚠️  Sora2激活过程出错: {activate_e}")
+
                         return {
                             "supported": False,
                             "invite_code": None
