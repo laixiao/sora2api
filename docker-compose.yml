@@ -5,7 +5,7 @@ services:
     image: sora2api:latest
     container_name: sora2api
     ports:
-      - "8000:8000"
+      - "5006:8000"
     volumes:
       - ./data:/app/data
       - ./config/setting.toml:/app/config/setting.toml
