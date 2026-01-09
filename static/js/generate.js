@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const $ = (id) => document.getElementById(id);
 
   const btnSend = $('btnSend');
@@ -1173,10 +1173,13 @@
             : statusMap[t.status] || '未知';
         const msg = t.message || '';
         return `
-          <div class="log-card ${active ? 'active' : ''}" data-logitem="${t.id}" style="cursor:pointer;">
-            <div class="log-card-head">
-              <span class="task-id-pill">#${t.id}</span>
-              <span class="pill-pill ${t.status}">${statusText}</span>
+          <div class="log-card ${active ? 'active' : ''}" data-logitem="${t.id}" style="cursor:pointer; position:relative;">
+            <div class="log-card-head" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span class="task-id-pill">#${t.id}</span>
+                <span class="pill-pill ${t.status}">${statusText}</span>
+              </div>
+              <button class="link-btn" data-delete="${t.id}" title="删除任务" style="padding:2px 6px;">🗙</button>
             </div>
             <div class="log-card-body" style="padding:8px 10px;">
               <div class="task-log-title" style="font-weight:600; font-size:13px; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeAttr(t.promptSnippet || '')}">
@@ -1195,6 +1198,16 @@
         if (!isNaN(id)) {
           currentLogTaskId = id;
           renderLogPanel();
+        }
+      });
+    });
+    logListContainer.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.getAttribute('data-delete'), 10);
+        if (!isNaN(id)) {
+          removeTask(id);
+          if (currentRightTab === 'log') renderLogPanel();
         }
       });
     });
@@ -1352,6 +1365,7 @@
             <div class="task-actions">
               ${t.url ? `<button class="link-btn" data-url="${escapeHtml(t.url)}" data-type="${escapeAttr(t.type || 'video')}">预览</button>` : ''}
               <button class="link-btn" data-expand="${t.id}">展开</button>
+              <button class="link-btn" data-delete="${t.id}" title="删除任务">🗙 删除</button>
             </div>
           </div>
         `;
@@ -1406,6 +1420,7 @@
               ${t.status === 'stalled' ? `<button class="link-btn" data-continue="${t.id}">继续</button>` : ''}
               ${t.promptUser ? `<button class="link-btn" data-reuse="${t.id}">复用提示</button>` : ''}
               <button class="link-btn" data-log="${t.id}">查看日志</button>
+              <button class="link-btn" data-delete="${t.id}" title="删除任务">🗙 删除</button>
             </div>
           </div>
         `;
@@ -1652,6 +1667,15 @@
         flashCard(btn);
       });
     });
+    taskList.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-delete'), 10);
+        if (!isNaN(id)) {
+          removeTask(id);
+          flashCard(btn);
+        }
+      });
+    });
     taskList.querySelectorAll('[data-expand]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = parseInt(btn.getAttribute('data-expand'), 10);
@@ -1871,6 +1895,7 @@
           downloadName || '下载'
         )}">下载</a>
         <button class="link-btn" data-copy="${safeUrlAttr}">复制链接</button>
+        ${taskId ? `<button class="link-btn text-destructive" data-delete="${taskId}" title="删除任务">🗙 删除</button>` : ''}
       </div>
     `;
     card.appendChild(info);
@@ -1923,6 +1948,15 @@
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         openPreviewModal(url, type, taskId);
+      });
+    });
+    card.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.getAttribute('data-delete') || '0', 10);
+        if (!isNaN(id) && id) {
+          removeTask(id);
+        }
       });
     });
 
@@ -2328,6 +2362,24 @@
       taskLogBuffer[id] = logText;
     }
     schedulePersistTasks();
+  };
+
+  const removeTask = (id) => {
+    const tid = typeof id === 'number' ? id : parseInt(String(id || '0'), 10);
+    if (!tid) return;
+    const idx = tasks.findIndex((t) => t && t.id === tid);
+    if (idx < 0) return;
+    tasks.splice(idx, 1);
+    delete taskLogBuffer[tid];
+    prunePreviewSeenTaskIds();
+    persistPreviewSeenTaskIds();
+    if (currentLogTaskId === tid) {
+      currentLogTaskId = tasks.length ? tasks[0].id : null;
+    }
+    scheduleRender({ tasks: true, previews: true });
+    schedulePersistTasks({ immediate: true });
+    updateUnreadDots();
+    showToast('任务已删除', 'success');
   };
 
   const updateTaskBubble = () => {

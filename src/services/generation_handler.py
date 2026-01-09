@@ -664,6 +664,40 @@ class GenerationHandler:
             if is_video and token_obj and self.concurrency_manager:
                 await self.concurrency_manager.release_video(token_obj.id)
 
+<<<<<<< HEAD
+=======
+            # Record error (check if it's an overload error)
+            if token_obj:
+                error_str = str(e).lower()
+                is_overload = "heavy_load" in error_str or "under heavy load" in error_str
+
+                # Auto-disable token if phone verification is required
+                is_phone_verification_error = False
+                try:
+                    parsed_error = json.loads(str(e))
+                    if isinstance(parsed_error, dict):
+                        error_info = parsed_error.get("error", {})
+                        if error_info.get("code") == "phone_number_required":
+                            is_phone_verification_error = True
+                except Exception:
+                    pass
+
+                # Fallback detection from raw string
+                if not is_phone_verification_error:
+                    phone_markers = [
+                        "phone_number_required",
+                        "verify a phone number",
+                        "phone number before continuing"
+                    ]
+                    is_phone_verification_error = any(marker in error_str for marker in phone_markers)
+
+                if is_phone_verification_error:
+                    await self.token_manager.update_token_status(token_obj.id, False)
+                    debug_logger.log_info(f"Token {token_obj.id} disabled due to phone verification requirement")
+
+                await self.token_manager.record_error(token_obj.id, is_overload=is_overload)
+
+>>>>>>> 3868f48 (新增粘贴导入)
             # Parse error message to check if it's a structured error (JSON)
             error_response = None
             try:

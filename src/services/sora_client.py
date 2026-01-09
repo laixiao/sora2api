@@ -374,6 +374,17 @@ class SoraClient:
                         )
                         # Raise exception with structured error data
                         raise Exception(error_msg)
+                    # Check for phone number verification requirement
+                    if error_info.get("code") == "phone_number_required":
+                        import json
+                        error_msg = json.dumps(error_data)
+                        debug_logger.log_error(
+                            error_message=f"Phone verification required: {error_msg}",
+                            status_code=response.status_code,
+                            response_text=error_msg
+                        )
+                        # Raise exception with structured error data for upstream handling
+                        raise Exception(error_msg)
 
                 # Generic error handling
                 error_msg = f"API request failed: {response.status_code} - {response.text}"

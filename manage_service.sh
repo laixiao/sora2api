@@ -8,10 +8,11 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 usage() {
   cat <<'EOF'
-Usage: manage_service.sh <install|update|restart|status|logs|disable>
+Usage: manage_service.sh <install|update|restart|stop|status|logs|disable>
   install : create+enable the systemd service and start it
   update  : git pull, install deps, restart service
   restart : restart the running service
+  stop    : stop the running service (without disabling)
   status  : show systemd status
   logs    : follow service logs
   disable : stop and disable the service
@@ -70,6 +71,7 @@ case "${1:-}" in
   install) install_service ;;
   update)  update_code ;;
   restart) require_root; systemctl restart "$SERVICE_NAME" ;;
+  stop)    require_root; systemctl stop "$SERVICE_NAME" ;;
   status)  require_root; systemctl status --no-pager "$SERVICE_NAME" ;;
   logs)    require_root; journalctl -u "$SERVICE_NAME" -f ;;
   disable) require_root; systemctl disable --now "$SERVICE_NAME" ;;
