@@ -1,19 +1,56 @@
 """Sora API client module"""
 import base64
+import hashlib
+import json
 import io
 import time
 import random
 import string
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Tuple
+from uuid import uuid4
 from curl_cffi.requests import AsyncSession
 from curl_cffi import CurlMime
 from .proxy_manager import ProxyManager
 from ..core.config import config
 from ..core.logger import debug_logger
 
+# PoW related constants
+POW_MAX_ITERATION = 500000
+POW_CORES = [8, 16, 24, 32]
+POW_SCRIPTS = [
+    "https://cdn.oaistatic.com/_next/static/cXh69klOLzS0Gy2joLDRS/_ssgManifest.js?dpl=453ebaec0d44c2decab71692e1bfe39be35a24b3"
+]
+POW_DPL = ["prod-f501fe933b3edf57aea882da888e1a544df99840"]
+POW_NAVIGATOR_KEYS = [
+    "registerProtocolHandler−function registerProtocolHandler() { [native code] }",
+    "storage−[object StorageManager]",
+    "locks−[object LockManager]",
+    "appCodeName−Mozilla",
+    "permissions−[object Permissions]",
+    "webdriver−false",
+    "vendor−Google Inc.",
+    "mediaDevices−[object MediaDevices]",
+    "cookieEnabled−true",
+    "product−Gecko",
+    "productSub−20030107",
+    "hardwareConcurrency−32",
+    "onLine−true",
+]
+POW_DOCUMENT_KEYS = ["_reactListeningo743lnnpvdg", "location"]
+POW_WINDOW_KEYS = [
+    "0", "window", "self", "document", "name", "location",
+    "navigator", "screen", "innerWidth", "innerHeight",
+    "localStorage", "sessionStorage", "crypto", "performance",
+    "fetch", "setTimeout", "setInterval", "console",
+]
+
 class SoraClient:
     """Sora API client with proxy support"""
+
+    CHATGPT_BASE_URL = "https://chatgpt.com"
+    SENTINEL_FLOW = "sora_2_create_task"
 
     def __init__(self, proxy_manager: ProxyManager):
         self.proxy_manager = proxy_manager
@@ -21,15 +58,150 @@ class SoraClient:
         self.timeout = config.sora_timeout
 
     @staticmethod
-    def _generate_sentinel_token() -> str:
-        """
-        生成 openai-sentinel-token
-        根据测试文件的逻辑，传入任意随机字符即可
-        生成10-20个字符的随机字符串（字母+数字）
-        """
-        length = random.randint(10, 20)
-        random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-        return random_str
+    def _get_pow_parse_time() -> str:
+        """Generate time string for PoW (EST timezone)"""
+        now = datetime.now(timezone(timedelta(hours=-5)))
+        return now.strftime("%a %b %d %Y %H:%M:%S") + " GMT-0500 (Eastern Standard Time)"
+
+    @staticmethod
+    def _get_pow_config(user_agent: str) -> list:
+        """Generate PoW config array with browser fingerprint"""
+        return [
+            random.choice([1920 + 1080, 2560 + 1440, 1920 + 1200, 2560 + 1600]),
+            SoraClient._get_pow_parse_time(),
+            4294705152,
+            0,  # [3] dynamic
+            user_agent,
+            random.choice(POW_SCRIPTS) if POW_SCRIPTS else "",
+            random.choice(POW_DPL) if POW_DPL else None,
+            "en-US",
+            "en-US,es-US,en,es",
+            0,  # [9] dynamic
+            random.choice(POW_NAVIGATOR_KEYS),
+            random.choice(POW_DOCUMENT_KEYS),
+            random.choice(POW_WINDOW_KEYS),
+            time.perf_counter() * 1000,
+            str(uuid4()),
+            "",
+            random.choice(POW_CORES),
+            time.time() * 1000 - (time.perf_counter() * 1000),
+        ]
+
+    @staticmethod
+    def _solve_pow(seed: str, difficulty: str, config_list: list) -> Tuple[str, bool]:
+        """Execute PoW calculation using SHA3-512 hash collision"""
+        diff_len = len(difficulty) // 2
+        seed_encoded = seed.encode()
+        target_diff = bytes.fromhex(difficulty)
+
+        static_part1 = (json.dumps(config_list[:3], separators=(',', ':'), ensure_ascii=False)[:-1] + ',').encode()
+        static_part2 = (',' + json.dumps(config_list[4:9], separators=(',', ':'), ensure_ascii=False)[1:-1] + ',').encode()
+        static_part3 = (',' + json.dumps(config_list[10:], separators=(',', ':'), ensure_ascii=False)[1:]).encode()
+
+        for i in range(POW_MAX_ITERATION):
+            dynamic_i = str(i).encode()
+            dynamic_j = str(i >> 1).encode()
+
+            final_json = static_part1 + dynamic_i + static_part2 + dynamic_j + static_part3
+            b64_encoded = base64.b64encode(final_json)
+
+            hash_value = hashlib.sha3_512(seed_encoded + b64_encoded).digest()
+
+            if hash_value[:diff_len] <= target_diff:
+                return b64_encoded.decode(), True
+
+        error_token = "wQ8Lk5FbGpA2NcR9dShT6gYjU7VxZ4D" + base64.b64encode(f'"{seed}"'.encode()).decode()
+        return error_token, False
+
+    @staticmethod
+    def _get_pow_token(user_agent: str) -> str:
+        """Generate initial PoW token"""
+        config_list = SoraClient._get_pow_config(user_agent)
+        seed = format(random.random())
+        difficulty = "0fffff"
+        solution, _ = SoraClient._solve_pow(seed, difficulty, config_list)
+        return "gAAAAAC" + solution
+
+    @staticmethod
+    def _build_sentinel_token(
+        flow: str,
+        req_id: str,
+        pow_token: str,
+        resp: Dict[str, Any],
+        user_agent: str,
+    ) -> str:
+        """Build openai-sentinel-token from PoW response"""
+        final_pow_token = pow_token
+
+        # Check if PoW is required
+        proofofwork = resp.get("proofofwork", {})
+        if proofofwork.get("required"):
+            seed = proofofwork.get("seed", "")
+            difficulty = proofofwork.get("difficulty", "")
+            if seed and difficulty:
+                config_list = SoraClient._get_pow_config(user_agent)
+                solution, success = SoraClient._solve_pow(seed, difficulty, config_list)
+                final_pow_token = "gAAAAAB" + solution
+                if not success:
+                    debug_logger.log_warning("PoW calculation failed, using error token")
+
+        token_payload = {
+            "p": final_pow_token,
+            "t": resp.get("turnstile", {}).get("dx", ""),
+            "c": resp.get("token", ""),
+            "id": req_id,
+            "flow": flow,
+        }
+        return json.dumps(token_payload, ensure_ascii=False, separators=(",", ":"))
+
+    async def _generate_sentinel_token(self, token: Optional[str] = None) -> str:
+        """Generate openai-sentinel-token by calling /backend-api/sentinel/req and solving PoW"""
+        req_id = str(uuid4())
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        pow_token = self._get_pow_token(user_agent)
+
+        proxy_url = await self.proxy_manager.get_proxy_url()
+
+        # Request sentinel/req endpoint
+        url = f"{self.CHATGPT_BASE_URL}/backend-api/sentinel/req"
+        payload = {"p": pow_token, "flow": self.SENTINEL_FLOW, "id": req_id}
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+            "Origin": "https://sora.chatgpt.com",
+            "Referer": "https://sora.chatgpt.com/",
+            "User-Agent": user_agent,
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        async with AsyncSession() as session:
+            kwargs = {
+                "headers": headers,
+                "json": payload,
+                "timeout": 10,
+                "impersonate": "chrome"
+            }
+            if proxy_url:
+                kwargs["proxy"] = proxy_url
+
+            response = await session.post(url, **kwargs)
+
+            if response.status_code not in [200, 201]:
+                debug_logger.log_error(
+                    error_message=f"Sentinel request failed: {response.status_code}",
+                    status_code=response.status_code,
+                    response_text=response.text
+                )
+                raise Exception(f"Sentinel request failed: {response.status_code}")
+
+            resp = response.json()
+
+        # Build final sentinel token
+        sentinel_token = self._build_sentinel_token(
+            self.SENTINEL_FLOW, req_id, pow_token, resp, user_agent
+        )
+        return sentinel_token
 
     @staticmethod
     def is_storyboard_prompt(prompt: str) -> bool:
@@ -117,7 +289,7 @@ class SoraClient:
 
         # 只在生成请求时添加 sentinel token
         if add_sentinel_token:
-            headers["openai-sentinel-token"] = self._generate_sentinel_token()
+            headers["openai-sentinel-token"] = await self._generate_sentinel_token(token)
 
         if not multipart:
             headers["Content-Type"] = "application/json"
