@@ -1509,10 +1509,29 @@ class GenerationHandler:
                     "username": username,
                     "display_name": display_name,
                     "character_id": character_id,
-                    "cameo_id": cameo_id
+                    "cameo_id": cameo_id,
+                    "profile_asset_url": profile_asset_url,
+                    "profile_asset_pointer": asset_pointer
                 },
                 status_code=200,
                 duration=duration
+            )
+
+            # Emit structured character card payload (for frontend parsing)
+            character_card_payload = {
+                "event": "character_card",
+                "card": {
+                    "username": username,
+                    "display_name": display_name,
+                    "avatar_path": profile_asset_url,
+                    "profile_asset_url": profile_asset_url,
+                    "profile_asset_pointer": asset_pointer,
+                    "cameo_id": cameo_id,
+                    "character_id": character_id
+                }
+            }
+            yield self._format_stream_chunk(
+                content=json.dumps(character_card_payload, ensure_ascii=True)
             )
 
             # Step 7: Return success message
