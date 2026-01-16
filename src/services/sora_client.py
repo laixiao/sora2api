@@ -934,3 +934,26 @@ class SoraClient:
 
         result = await self._make_request("POST", "/nf/create/storyboard", token, json_data=json_data, add_sentinel_token=True)
         return result.get("id")
+
+    async def enhance_prompt(self, prompt: str, token: str, expansion_level: str = "medium",
+                            duration_s: int = 10, token_id: Optional[int] = None) -> str:
+        """Enhance prompt using Sora's prompt enhancement API
+
+        Args:
+            prompt: Original prompt to enhance
+            token: Access token
+            expansion_level: Expansion level (medium/long)
+            duration_s: Duration in seconds (10/15/20)
+            token_id: Token ID for getting token-specific proxy (optional)
+
+        Returns:
+            Enhanced prompt text
+        """
+        json_data = {
+            "prompt": prompt,
+            "expansion_level": expansion_level,
+            "duration_s": duration_s
+        }
+
+        result = await self._make_request("POST", "/editor/enhance_prompt", token, json_data=json_data, token_id=token_id)
+        return result.get("enhanced_prompt", "")

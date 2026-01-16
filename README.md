@@ -119,6 +119,7 @@ python main.py
 | 角色生成视频 | `sora2-*` | 使用 `content` 数组 + `video_url` + 文本 |
 | Remix | `sora2-*` | 在 `content` 中包含 Remix ID |
 | 视频分镜 | `sora2-*` | 在 `content` 中使用```[时长s]提示词```格式触发 |
+| 提示词优化 | `prompt-enhance-*` | 将简单提示词扩展为详细的电影级提示词 |
 
 ---
 
@@ -175,6 +176,28 @@ python main.py
 
 > **注意：** Pro 系列模型需要 ChatGPT Pro 订阅（`plan_type: "chatgpt_pro"`）。如果没有 Pro 账号，请求这些模型会返回错误。
 
+**提示词优化模型**
+
+将简单提示词扩展为详细的电影级提示词，包含场景设置、镜头运动、光影效果、分镜描述等。
+
+| 模型 | 扩展级别 | 时长 | 说明 |
+|------|---------|------|------|
+| `prompt-enhance-short-10s` | 简短 | 10秒 | 生成简洁的增强提示词 |
+| `prompt-enhance-short-15s` | 简短 | 15秒 | 生成简洁的增强提示词 |
+| `prompt-enhance-short-20s` | 简短 | 20秒 | 生成简洁的增强提示词 |
+| `prompt-enhance-medium-10s` | 中等 | 10秒 | 生成中等长度的增强提示词 |
+| `prompt-enhance-medium-15s` | 中等 | 15秒 | 生成中等长度的增强提示词 |
+| `prompt-enhance-medium-20s` | 中等 | 20秒 | 生成中等长度的增强提示词 |
+| `prompt-enhance-long-10s` | 详细 | 10秒 | 生成详细的增强提示词 |
+| `prompt-enhance-long-15s` | 详细 | 15秒 | 生成详细的增强提示词 |
+| `prompt-enhance-long-20s` | 详细 | 20秒 | 生成详细的增强提示词 |
+
+**特点：**
+- 支持流式和非流式响应
+- 自动生成包含PRIMARY、SETTING、LOOK、CAMERA、LIGHT等专业电影术语的提示词
+- 包含详细的分镜描述（时间轴、镜头运动、焦点、光影）
+- 可直接用于视频生成模型
+
 #### 请求示例
 
 **文生图**
@@ -221,6 +244,42 @@ curl -X POST "http://localhost:8000/v1/chat/completions" \
       }
     ],
     "stream": true
+  }'
+```
+
+**提示词优化（流式）**
+
+```bash
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Authorization: Bearer han1234" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "prompt-enhance-medium-10s",
+    "messages": [
+      {
+        "role": "user",
+        "content": "猫猫"
+      }
+    ],
+    "stream": true
+  }'
+```
+
+**提示词优化（非流式）**
+
+```bash
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Authorization: Bearer han1234" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "prompt-enhance-long-15s",
+    "messages": [
+      {
+        "role": "user",
+        "content": "一只橘猫在窗台玩耍"
+      }
+    ],
+    "stream": false
   }'
 ```
 
