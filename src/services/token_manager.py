@@ -899,6 +899,10 @@ class TokenManager:
         """Delete a token"""
         await self.db.delete_token(token_id)
 
+    async def delete_all_tokens(self) -> int:
+        """Delete all tokens"""
+        return await self.db.delete_all_tokens()
+
     async def update_token(self, token_id: int,
                           token: Optional[str] = None,
                           st: Optional[str] = None,
@@ -959,6 +963,10 @@ class TokenManager:
     async def disable_token(self, token_id: int):
         """Disable a token"""
         await self.db.update_token_status(token_id, False)
+
+    async def disable_non_sora2_active_tokens(self) -> int:
+        """Disable all active tokens that do not support Sora2"""
+        return await self.db.disable_non_sora2_active_tokens()
 
     async def test_token(self, token_id: int) -> dict:
         """Test if a token is valid by calling Sora API and refresh account info (subscription + Sora2)"""

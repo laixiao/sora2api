@@ -589,6 +589,17 @@ class Database:
             """, (token_id,))
             await db.commit()
 
+    async def disable_non_sora2_active_tokens(self) -> int:
+        """Disable all active tokens that do not support Sora2"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                UPDATE tokens
+                SET is_active = 0
+                WHERE is_active = 1 AND (sora2_supported IS NULL OR sora2_supported = 0)
+            """)
+            await db.commit()
+            return cursor.rowcount
+    
     async def update_token_sora2(self, token_id: int, supported: bool, invite_code: Optional[str] = None,
                                 redeemed_count: int = 0, total_count: int = 0, remaining_count: int = 0):
         """Update token Sora2 support info"""
@@ -630,6 +641,17 @@ class Database:
             await db.execute("DELETE FROM token_stats WHERE token_id = ?", (token_id,))
             await db.execute("DELETE FROM tokens WHERE id = ?", (token_id,))
             await db.commit()
+
+    async def delete_all_tokens(self) -> int:
+        """Delete all tokens"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT COUNT(*) FROM tokens")
+            row = await cursor.fetchone()
+            count = int(row[0] or 0) if row else 0
+            await db.execute("DELETE FROM token_stats")
+            await db.execute("DELETE FROM tokens")
+            await db.commit()
+            return count
 
     async def update_token(self, token_id: int,
                           token: Optional[str] = None,

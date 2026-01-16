@@ -321,6 +321,41 @@ async def disable_token(token_id: int, token: str = Depends(verify_admin_token))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+async def _disable_non_sora2_active_tokens():
+    """Internal helper to disable non-Sora2 active tokens"""
+    affected = await token_manager.disable_non_sora2_active_tokens()
+    return {"success": True, "message": "Non-Sora2 active tokens disabled", "affected": affected}
+
+@router.post("/api/tokens/disable-non-sora2")
+async def disable_non_sora2_active_tokens(token: str = Depends(verify_admin_token)):
+    """
+    Disable all active tokens that do not support Sora2.
+    Returns number of tokens updated.
+    """
+    try:
+        return await _disable_non_sora2_active_tokens()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Provide GET alias to avoid 405 issues in some deployments
+@router.get("/api/tokens/disable-non-sora2")
+async def disable_non_sora2_active_tokens_get(token: str = Depends(verify_admin_token)):
+    """
+    GET alias for disabling non-Sora2 active tokens (idempotent maintenance action).
+    """
+    try:
+        return await _disable_non_sora2_active_tokens()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.api_route("/api/admin/maintenance/disable-non-sora2", methods=["GET", "POST"])
+async def disable_non_sora2_active_tokens_maintenance(token: str = Depends(verify_admin_token)):
+    """Fallback endpoint for deployments/proxies that block /api/tokens/* maintenance actions."""
+    try:
+        return await _disable_non_sora2_active_tokens()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/api/tokens/{token_id}/test")
 async def test_token(token_id: int, token: str = Depends(verify_admin_token)):
     """Test if a token is valid"""
@@ -480,6 +515,14 @@ async def batch_update_proxy(request: BatchUpdateProxyRequest, token: str = Depe
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@router.delete("/api/tokens")
+async def delete_all_tokens(token: str = Depends(verify_admin_token)):
+    """Delete all tokens"""
+    try:
+        deleted = await token_manager.delete_all_tokens()
+        return {"success": True, "message": "Tokens deleted", "deleted": deleted}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/api/tokens/import")
 async def import_tokens(request: ImportTokensRequest, token: str = Depends(verify_admin_token)):
