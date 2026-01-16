@@ -664,8 +664,6 @@ class GenerationHandler:
             if is_video and token_obj and self.concurrency_manager:
                 await self.concurrency_manager.release_video(token_obj.id)
 
-<<<<<<< HEAD
-=======
             # Record error (check if it's an overload error)
             if token_obj:
                 error_str = str(e).lower()
@@ -697,7 +695,6 @@ class GenerationHandler:
 
                 await self.token_manager.record_error(token_obj.id, is_overload=is_overload)
 
->>>>>>> 3868f48 (新增粘贴导入)
             # Parse error message to check if it's a structured error (JSON)
             error_response = None
             try:
